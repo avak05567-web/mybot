@@ -1,15 +1,13 @@
 
-
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
-from datetime import datetime
 import json
 import os
 
 # =====================
 # 🔐 CONFIG
 # =====================
-TOKEN = "8635483359:AAFV1wrBusjFP-Z8CKOFH5I7UonPf4147Co"  # BotFather token
+TOKEN = "8635483359:AAFV1wrBusjFP-Z8CKOFH5I7UonPf4147Co"
 ADMIN_ID = 7054785724
 
 DATA_FILE = "data.json"
@@ -17,13 +15,11 @@ DATA_FILE = "data.json"
 # =====================
 # 💾 DATABASE
 # =====================
-
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r") as f:
             return json.load(f)
     return {"balances": {}, "orders": {}, "referrals": {}}
-
 
 def save_data():
     with open(DATA_FILE, "w") as f:
@@ -32,18 +28,15 @@ def save_data():
 DB = load_data()
 
 # =====================
-# 🧠 HELPERS
+# 💰 HELPERS
 # =====================
-
 def get_balance(uid):
     return DB["balances"].get(str(uid), 0)
-
 
 def add_balance(uid, amount):
     uid = str(uid)
     DB["balances"][uid] = get_balance(uid) + amount
     save_data()
-
 
 def add_order(uid, order):
     uid = str(uid)
@@ -52,12 +45,13 @@ def add_order(uid, order):
     save_data()
 
 # =====================
-# 📋 MENU
+# 📋 MENYU
 # =====================
 menu = ReplyKeyboardMarkup([
     ["🛠 Xizmatlar", "📦 Buyurtmalar"],
     ["💰 Balans", "💳 To‘lov"],
-    ["🎁 Bonus", "🤝 Referral"]
+    ["🎁 Bonus", "🤝 Referral"],
+    ["📩 Adminga xabar"]
 ], resize_keyboard=True)
 
 services = ReplyKeyboardMarkup([
@@ -81,11 +75,9 @@ admin_panel = ReplyKeyboardMarkup([
 # =====================
 user_state = {}
 temp_order = {}
-last_bonus = {}
-ref_used = set()
 
 # =====================
-# 🚀 START + REFERRAL
+# 🚀 START
 # =====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
@@ -93,20 +85,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     DB["balances"].setdefault(str(uid), 0)
     DB["orders"].setdefault(str(uid), [])
 
-    # referral system
-    if context.args:
-        ref_id = str(context.args[0])
-
-        if ref_id != str(uid):
-            DB["referrals"].setdefault(ref_id, 0)
-
-            if str(uid) not in DB["referrals"]:
-                DB["referrals"][str(uid)] = ref_id
-                add_balance(ref_id, 100)
-
     save_data()
 
-    await update.message.reply_text("👋 Xush kelibsiz botga", reply_markup=menu)
+    await update.message.reply_text("👋 Xush kelibsiz!", reply_markup=menu)
 
 # =====================
 # 📩 HANDLER
@@ -124,35 +105,70 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Admin panel", reply_markup=admin_panel)
         return
 
-    if text == "📊 Statistika" and uid == ADMIN_ID:
-        await update.message.reply_text(f"Userlar: {len(DB['balances'])}")
-        return
-
+    # ================= ADMIN BALANCE =================
     if text == "💰 Userga balans" and uid == ADMIN_ID:
         user_state[uid] = "add_balance"
-        await update.message.reply_text("User ID va summa yozing: id 1000")
+        await update.message.reply_text("ID va summa: id 1000")
         return
 
     if user_state.get(uid) == "add_balance" and uid == ADMIN_ID:
         try:
-            parts = text.split()
-            target = parts[0]
-            amount = int(parts[1])
-            add_balance(target, amount)
-            await update.message.reply_text("Balans qo‘shildi")
+            target, amount = text.split()
+            add_balance(target, int(amount))
+            await update.message.reply_text("Qo‘shildi")
         except:
             await update.message.reply_text("Xato format")
         user_state[uid] = None
         return
 
-    # ================= BACK =================
-    if text == "🔙 Ortga":
-        user_state[uid] = None
-        await update.message.reply_text("Menu", reply_markup=menu)
+    # ================= ADMIN MSG =================
+    if text == "📩 Adminga xabar":
+        user_state[uid] = "admin_msg"
+        await update.message.reply_text("📩 Xabaringizni yozing:")
         return
 
+    if user_state.get(uid) == "admin_msg":
+        await context.bot.send_message(
+            ADMIN_ID,
+            f"📩 YANGI XABAR\n\n@{username}\nID: {uid}\n\n{text}"
+        )
+        await update.message.reply_text("✔️ Yuborildi")
+        user_state[uid] = None
+        return
+
+    # ================= TO‘LOV =================
+    if text == "💳 To‘lov":
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📩 Chek yuborish", callback_data="send_receipt")]
+        ])
+
+        await update.message.reply_text(
+            "💳 KARTA:\n9860 1666 6553 2306\n\nTo‘lov qiling va chekni yuboring",
+            reply_markup=kb
+        )
+        return
+
+    # ================= CHECK SEND MODE =================
+    if user_state.get(uid) == "send_receipt":
+        await context.bot.send_message(
+            ADMIN_ID,
+            f"💳 CHEK\n\n@{username}\nID: {uid}\n\n{text}"
+        )
+        await update.message.reply_text("✔️ Chek yuborildi")
+        user_state[uid] = None
+        return
+
+    # ================= BALANCE =================
+    if text == "💰 Balans":
+        await update.message.reply_text(f"Balans: {get_balance(uid)} so‘m")
+
+    # ================= BACK =================
+    elif text == "🔙 Ortga":
+        user_state[uid] = None
+        await update.message.reply_text("Menu", reply_markup=menu)
+
     # ================= SERVICES =================
-    if text == "🛠 Xizmatlar":
+    elif text == "🛠 Xizmatlar":
         await update.message.reply_text("Xizmatlar", reply_markup=services)
 
     elif text == "📸 Instagram":
@@ -160,25 +176,21 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif text == "👥 Obunachi":
         user_state[uid] = "sub"
-        await update.message.reply_text("Nechta obunachi? (min 100)")
+        await update.message.reply_text("Nechta obunachi?")
 
     elif user_state.get(uid) == "sub":
         try:
             count = int(text)
-            if count < 100:
-                await update.message.reply_text("Minimum 100")
-                return
-
             price = (count // 100) * 4000
 
             temp_order[uid] = {"type": "Obunachi", "count": count, "price": price}
 
             kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("Ha", callback_data="yes"), InlineKeyboardButton("Yo‘q", callback_data="no")]
+                [InlineKeyboardButton("Ha", callback_data="yes"),
+                 InlineKeyboardButton("Yo‘q", callback_data="no")]
             ])
 
-            await update.message.reply_text(f"{count} obunachi = {price} so‘m", reply_markup=kb)
-
+            await update.message.reply_text(f"{count} = {price} so‘m", reply_markup=kb)
         except:
             await update.message.reply_text("Raqam kiriting")
 
@@ -192,31 +204,22 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif user_state.get(uid) == "like":
         try:
             count = int(text)
-            if count < 100:
-                await update.message.reply_text("Minimum 100")
-                return
-
             price = count * 15
 
             temp_order[uid] = {"type": "Like", "count": count, "price": price}
 
             kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("Ha", callback_data="yes"), InlineKeyboardButton("Yo‘q", callback_data="no")]
+                [InlineKeyboardButton("Ha", callback_data="yes"),
+                 InlineKeyboardButton("Yo‘q", callback_data="no")]
             ])
 
-            await update.message.reply_text(f"{count} like = {price} so‘m", reply_markup=kb)
-
+            await update.message.reply_text(f"{count} = {price} so‘m", reply_markup=kb)
         except:
             await update.message.reply_text("Raqam kiriting")
 
         user_state[uid] = None
         return
 
-    # ================= BALANCE =================
-    elif text == "💰 Balans":
-        await update.message.reply_text(f"Balans: {get_balance(uid)} so‘m")
-
-    # ================= ORDERS =================
     elif text == "📦 Buyurtmalar":
         orders = DB["orders"].get(str(uid), [])
         if not orders:
@@ -227,19 +230,12 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 msg += f"{o['type']} {o['count']} = {o['price']}\n"
             await update.message.reply_text(msg)
 
-    # ================= REFERRAL =================
     elif text == "🤝 Referral":
-        bot_username = context.bot.username
-        link = f"https://t.me/{bot_username}?start={uid}"
-
-        await update.message.reply_text(f"Referral link:\n{link}\n+100 so'm har user")
-
-    # ================= PAYMENT =================
-    elif text == "💳 To‘lov":
-        await update.message.reply_text("Karta: 9860 xxxx xxxx xxxx")
+        link = f"https://t.me/{context.bot.username}?start={uid}"
+        await update.message.reply_text(f"Referral:\n{link}")
 
     else:
-        await update.message.reply_text("❌ Menyudan tanla")
+        await update.message.reply_text("Menyudan tanla")
 
 # =====================
 # 🔘 CALLBACK
@@ -250,6 +246,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     uid = query.from_user.id
     username = query.from_user.username or "user"
+
+    # CHECK MODE
+    if query.data == "send_receipt":
+        user_state[uid] = "send_receipt"
+        await query.message.reply_text("📩 Chekni yuboring:")
+        return
 
     order = temp_order.get(uid)
 
@@ -267,7 +269,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_message(
             ADMIN_ID,
-            f"BUYURTMA\n@{username}\n{order}"
+            f"🛒 BUYURTMA\n@{username}\n{order}"
         )
 
         await query.edit_message_text("Qabul qilindi")
@@ -284,5 +286,5 @@ app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
 app.add_handler(CallbackQueryHandler(button))
 
-print("BOT RUNNING...")
+print("BOT IS RUNNING...")
 app.run_polling()
