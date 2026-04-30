@@ -5,7 +5,7 @@ import json
 import os
 
 # =====================
-# 🔐 CONFIG
+# CONFIG
 # =====================
 TOKEN = "8635483359:AAFV1wrBusjFP-Z8CKOFH5I7UonPf4147Co"
 ADMIN_ID = 7054785724
@@ -13,7 +13,7 @@ ADMIN_ID = 7054785724
 DATA_FILE = "data.json"
 
 # =====================
-# 💾 DATABASE
+# DB
 # =====================
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -28,7 +28,7 @@ def save_data():
 DB = load_data()
 
 # =====================
-# 💰 HELPERS
+# HELPERS
 # =====================
 def get_balance(uid):
     return DB["balances"].get(str(uid), 0)
@@ -45,7 +45,14 @@ def add_order(uid, order):
     save_data()
 
 # =====================
-# 📋 MENYU
+# STATE
+# =====================
+user_state = {}
+temp_order = {}
+last_bonus = {}
+
+# =====================
+# MENU
 # =====================
 menu = ReplyKeyboardMarkup([
     ["🛠 Xizmatlar", "📦 Buyurtmalar"],
@@ -66,59 +73,71 @@ insta = ReplyKeyboardMarkup([
 
 admin_panel = ReplyKeyboardMarkup([
     ["📊 Statistika", "💰 Userga balans"],
-    ["📦 Buyurtmalar ko‘rish"],
     ["🔙 Ortga"]
 ], resize_keyboard=True)
 
 # =====================
-# 🧠 STATE
-# =====================
-user_state = {}
-temp_order = {}
-
-# =====================
-# 🚀 START
+# START + REFERRAL
 # =====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
+    uid = str(update.effective_user.id)
 
-    DB["balances"].setdefault(str(uid), 0)
-    DB["orders"].setdefault(str(uid), [])
+    DB["balances"].setdefault(uid, 0)
+    DB["orders"].setdefault(uid, [])
+    DB["referrals"].setdefault(uid, None)
 
-    save_data()
+    # referral
+    if context.args:
+        ref = str(context.args[0])
+
+        if ref != uid and DB["referrals"].get(uid) is None:
+            DB["referrals"][uid] = ref
+            DB["balances"][ref] = DB["balances"].get(ref, 0) + 100
+            save_data()
 
     await update.message.reply_text("👋 Xush kelibsiz!", reply_markup=menu)
 
 # =====================
-# 📩 HANDLER
+# MAIN HANDLER
 # =====================
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
-    uid = update.effective_user.id
+    uid = str(update.effective_user.id)
     username = update.effective_user.username or "user"
 
-    DB["balances"].setdefault(str(uid), 0)
-    DB["orders"].setdefault(str(uid), [])
+    DB["balances"].setdefault(uid, 0)
+    DB["orders"].setdefault(uid, [])
 
     # ================= ADMIN =================
-    if text == "/admin" and uid == ADMIN_ID:
+    if text == "/admin" and update.effective_user.id == ADMIN_ID:
         await update.message.reply_text("Admin panel", reply_markup=admin_panel)
         return
 
-    # ================= ADMIN BALANCE =================
-    if text == "💰 Userga balans" and uid == ADMIN_ID:
-        user_state[uid] = "add_balance"
-        await update.message.reply_text("ID va summa: id 1000")
+    # ================= BONUS =================
+    if text == "🎁 Bonus":
+        if last_bonus.get(uid):
+            await update.message.reply_text("❌ Siz allaqachon bonus olgansiz")
+            return
+
+        add_balance(uid, 200)
+        last_bonus[uid] = True
+        await update.message.reply_text("🎉 200 so‘m bonus oldingiz!")
         return
 
-    if user_state.get(uid) == "add_balance" and uid == ADMIN_ID:
-        try:
-            target, amount = text.split()
-            add_balance(target, int(amount))
-            await update.message.reply_text("Qo‘shildi")
-        except:
-            await update.message.reply_text("Xato format")
-        user_state[uid] = None
+    # ================= REFERRAL =================
+    if text == "🤝 Referral":
+        bot_username = context.bot.username
+        link = f"https://t.me/{bot_username}?start={uid}"
+        count = list(DB["referrals"].values()).count(uid)
+
+        await update.message.reply_text(
+            f"🔗 Referral link:\n{link}\n\n👥 Takliflar: {count}\n💰 100 so‘m har user"
+        )
+        return
+
+    # ================= BALANCE =================
+    if text == "💰 Balans":
+        await update.message.reply_text(f"💰 Balans: {get_balance(uid)} so‘m")
         return
 
     # ================= ADMIN MSG =================
@@ -130,49 +149,40 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_state.get(uid) == "admin_msg":
         await context.bot.send_message(
             ADMIN_ID,
-            f"📩 YANGI XABAR\n\n@{username}\nID: {uid}\n\n{text}"
+            f"📩 XABAR\n@{username}\nID: {uid}\n\n{text}"
         )
-        await update.message.reply_text("✔️ Yuborildi")
+        await update.message.reply_text("✔ Yuborildi")
         user_state[uid] = None
         return
 
-    # ================= TO‘LOV =================
+    # ================= PAYMENT =================
     if text == "💳 To‘lov":
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("📩 Chek yuborish", callback_data="send_receipt")]
         ])
 
         await update.message.reply_text(
-            "💳 KARTA:\n9860 1666 6553 2306\n\nTo‘lov qiling va chekni yuboring",
+            "💳 KARTA:\n9860 1666 5532 3060\n\nTo‘lov qiling va chek yuboring",
             reply_markup=kb
         )
         return
 
-    # ================= CHECK SEND MODE =================
+    # ================= RECEIPT MODE =================
     if user_state.get(uid) == "send_receipt":
         await context.bot.send_message(
             ADMIN_ID,
-            f"💳 CHEK\n\n@{username}\nID: {uid}\n\n{text}"
+            f"💳 CHEK\n@{username}\nID: {uid}\n\n{text}"
         )
-        await update.message.reply_text("✔️ Chek yuborildi")
+        await update.message.reply_text("✔ Chek yuborildi")
         user_state[uid] = None
         return
 
-    # ================= BALANCE =================
-    if text == "💰 Balans":
-        await update.message.reply_text(f"Balans: {get_balance(uid)} so‘m")
-
-    # ================= BACK =================
-    elif text == "🔙 Ortga":
-        user_state[uid] = None
-        await update.message.reply_text("Menu", reply_markup=menu)
-
     # ================= SERVICES =================
-    elif text == "🛠 Xizmatlar":
+    if text == "🛠 Xizmatlar":
         await update.message.reply_text("Xizmatlar", reply_markup=services)
 
     elif text == "📸 Instagram":
-        await update.message.reply_text("Instagram", reply_markup=insta)
+        await update.message.reply_text("Instagram xizmatlar")
 
     elif text == "👥 Obunachi":
         user_state[uid] = "sub"
@@ -221,7 +231,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     elif text == "📦 Buyurtmalar":
-        orders = DB["orders"].get(str(uid), [])
+        orders = DB["orders"].get(uid, [])
         if not orders:
             await update.message.reply_text("Bo‘sh")
         else:
@@ -230,27 +240,24 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 msg += f"{o['type']} {o['count']} = {o['price']}\n"
             await update.message.reply_text(msg)
 
-    elif text == "🤝 Referral":
-        link = f"https://t.me/{context.bot.username}?start={uid}"
-        await update.message.reply_text(f"Referral:\n{link}")
-
-    else:
-        await update.message.reply_text("Menyudan tanla")
+    elif text == "🔙 Ortga":
+        user_state[uid] = None
+        await update.message.reply_text("Menu", reply_markup=menu)
 
 # =====================
-# 🔘 CALLBACK
+# CALLBACK
 # =====================
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    uid = query.from_user.id
+    uid = str(query.from_user.id)
     username = query.from_user.username or "user"
 
-    # CHECK MODE
+    # receipt mode
     if query.data == "send_receipt":
         user_state[uid] = "send_receipt"
-        await query.message.reply_text("📩 Chekni yuboring:")
+        await query.message.reply_text("📩 Chek yuboring")
         return
 
     order = temp_order.get(uid)
@@ -278,7 +285,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Bekor qilindi")
 
 # =====================
-# 🚀 RUN
+# RUN
 # =====================
 app = ApplicationBuilder().token(TOKEN).build()
 
