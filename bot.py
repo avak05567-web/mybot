@@ -1,4 +1,5 @@
 
+
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 from datetime import datetime
@@ -8,8 +9,7 @@ import os
 # =====================
 # 🔐 CONFIG
 # =====================
-TOKEN = "8635483359:AAFV1wrBusjFP-Z8CKOFH5I7UonPf4147Co"
-  # BotFather token
+TOKEN = "8635483359:AAFV1wrBusjFP-Z8CKOFH5I7UonPf4147Co"  # BotFather token
 ADMIN_ID = 7054785724
 
 DATA_FILE = "data.json"
@@ -232,7 +232,9 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bot_username = context.bot.username
         link = f"https://t.me/{bot_username}?start={uid}"
 
-        await update.message.reply_text(f"Referral link:\n{link}\n+100 so'm har user============== PAYMENT =================
+        await update.message.reply_text(f"Referral link:\n{link}\n+100 so'm har user")
+
+    # ================= PAYMENT =================
     elif text == "💳 To‘lov":
         await update.message.reply_text("Karta: 9860 xxxx xxxx xxxx")
 
