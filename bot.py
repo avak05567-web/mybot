@@ -5,7 +5,7 @@ import sqlite3
 import time
 
 # ================= CONFIG =================
-TOKEN = "TOKEN"
+TOKEN = "8635483359:AAFV1wrBusjFP-Z8CKOFH5I7UonPf4147Co"
 ADMIN_ID = 7054785724
 CARD = "9860 1666 5532 3060"
 
