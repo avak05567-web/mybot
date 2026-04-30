@@ -7,7 +7,7 @@ import os
 # =====================
 # 🔐 CONFIG
 # =====================
-TOKEN = "PUT_YOUR_TOKEN_HERE"
+TOKEN = "8635483359:AAFV1wrBusjFP-Z8CKOFH5I7UonPf4147Co"
 ADMIN_ID = 7054785724
 
 DATA_FILE = "data.json"
