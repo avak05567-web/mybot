@@ -1,3 +1,4 @@
+
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 from datetime import datetime
@@ -8,6 +9,7 @@ import os
 # 🔐 CONFIG
 # =====================
 TOKEN = "8635483359:AAFV1wrBusjFP-Z8CKOFH5I7UonPf4147Co"
+  # BotFather token
 ADMIN_ID = 7054785724
 
 DATA_FILE = "data.json"
@@ -20,7 +22,8 @@ def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r") as f:
             return json.load(f)
-    return {"balances": {}, "orders": {}}
+    return {"balances": {}, "orders": {}, "referrals": {}}
+
 
 def save_data():
     with open(DATA_FILE, "w") as f:
@@ -35,10 +38,12 @@ DB = load_data()
 def get_balance(uid):
     return DB["balances"].get(str(uid), 0)
 
+
 def add_balance(uid, amount):
     uid = str(uid)
     DB["balances"][uid] = get_balance(uid) + amount
     save_data()
+
 
 def add_order(uid, order):
     uid = str(uid)
@@ -47,12 +52,12 @@ def add_order(uid, order):
     save_data()
 
 # =====================
-# 📋 MENUS
+# 📋 MENU
 # =====================
 menu = ReplyKeyboardMarkup([
     ["🛠 Xizmatlar", "📦 Buyurtmalar"],
     ["💰 Balans", "💳 To‘lov"],
-    ["🎁 Bonus"]
+    ["🎁 Bonus", "🤝 Referral"]
 ], resize_keyboard=True)
 
 services = ReplyKeyboardMarkup([
@@ -65,26 +70,43 @@ insta = ReplyKeyboardMarkup([
     ["🔙 Ortga"]
 ], resize_keyboard=True)
 
+admin_panel = ReplyKeyboardMarkup([
+    ["📊 Statistika", "💰 Userga balans"],
+    ["📦 Buyurtmalar ko‘rish"],
+    ["🔙 Ortga"]
+], resize_keyboard=True)
+
 # =====================
 # 🧠 STATE
 # =====================
 user_state = {}
 temp_order = {}
 last_bonus = {}
+ref_used = set()
 
 # =====================
-# 🚀 START
+# 🚀 START + REFERRAL
 # =====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
 
     DB["balances"].setdefault(str(uid), 0)
     DB["orders"].setdefault(str(uid), [])
+
+    # referral system
+    if context.args:
+        ref_id = str(context.args[0])
+
+        if ref_id != str(uid):
+            DB["referrals"].setdefault(ref_id, 0)
+
+            if str(uid) not in DB["referrals"]:
+                DB["referrals"][str(uid)] = ref_id
+                add_balance(ref_id, 100)
+
     save_data()
 
-    user_state[uid] = None  # reset state
-
-    await update.message.reply_text("👋 Xush kelibsiz PRO SMM bot", reply_markup=menu)
+    await update.message.reply_text("👋 Xush kelibsiz botga", reply_markup=menu)
 
 # =====================
 # 📩 HANDLER
@@ -97,20 +119,44 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     DB["balances"].setdefault(str(uid), 0)
     DB["orders"].setdefault(str(uid), [])
 
-    # 🔙 ORTGA - FIXED
+    # ================= ADMIN =================
+    if text == "/admin" and uid == ADMIN_ID:
+        await update.message.reply_text("Admin panel", reply_markup=admin_panel)
+        return
+
+    if text == "📊 Statistika" and uid == ADMIN_ID:
+        await update.message.reply_text(f"Userlar: {len(DB['balances'])}")
+        return
+
+    if text == "💰 Userga balans" and uid == ADMIN_ID:
+        user_state[uid] = "add_balance"
+        await update.message.reply_text("User ID va summa yozing: id 1000")
+        return
+
+    if user_state.get(uid) == "add_balance" and uid == ADMIN_ID:
+        try:
+            parts = text.split()
+            target = parts[0]
+            amount = int(parts[1])
+            add_balance(target, amount)
+            await update.message.reply_text("Balans qo‘shildi")
+        except:
+            await update.message.reply_text("Xato format")
+        user_state[uid] = None
+        return
+
+    # ================= BACK =================
     if text == "🔙 Ortga":
         user_state[uid] = None
         await update.message.reply_text("Menu", reply_markup=menu)
         return
 
-    # 🛠 SERVICES
+    # ================= SERVICES =================
     if text == "🛠 Xizmatlar":
-        user_state[uid] = None
-        await update.message.reply_text("Xizmat tanlang", reply_markup=services)
+        await update.message.reply_text("Xizmatlar", reply_markup=services)
 
     elif text == "📸 Instagram":
-        user_state[uid] = None
-        await update.message.reply_text("Instagram xizmatlar", reply_markup=insta)
+        await update.message.reply_text("Instagram", reply_markup=insta)
 
     elif text == "👥 Obunachi":
         user_state[uid] = "sub"
@@ -128,8 +174,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             temp_order[uid] = {"type": "Obunachi", "count": count, "price": price}
 
             kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("Ha", callback_data="yes"),
-                 InlineKeyboardButton("Yo‘q", callback_data="no")]
+                [InlineKeyboardButton("Ha", callback_data="yes"), InlineKeyboardButton("Yo‘q", callback_data="no")]
             ])
 
             await update.message.reply_text(f"{count} obunachi = {price} so‘m", reply_markup=kb)
@@ -156,8 +201,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             temp_order[uid] = {"type": "Like", "count": count, "price": price}
 
             kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("Ha", callback_data="yes"),
-                 InlineKeyboardButton("Yo‘q", callback_data="no")]
+                [InlineKeyboardButton("Ha", callback_data="yes"), InlineKeyboardButton("Yo‘q", callback_data="no")]
             ])
 
             await update.message.reply_text(f"{count} like = {price} so‘m", reply_markup=kb)
@@ -168,7 +212,11 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_state[uid] = None
         return
 
-    # 📦 ORDERS
+    # ================= BALANCE =================
+    elif text == "💰 Balans":
+        await update.message.reply_text(f"Balans: {get_balance(uid)} so‘m")
+
+    # ================= ORDERS =================
     elif text == "📦 Buyurtmalar":
         orders = DB["orders"].get(str(uid), [])
         if not orders:
@@ -179,21 +227,12 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 msg += f"{o['type']} {o['count']} = {o['price']}\n"
             await update.message.reply_text(msg)
 
-    # 💰 BALANCE
-    elif text == "💰 Balans":
-        await update.message.reply_text(f"Balans: {get_balance(uid)} so‘m")
+    # ================= REFERRAL =================
+    elif text == "🤝 Referral":
+        bot_username = context.bot.username
+        link = f"https://t.me/{bot_username}?start={uid}"
 
-    # 🎁 BONUS
-    elif text == "🎁 Bonus":
-        today = str(datetime.now().date())
-        if last_bonus.get(uid) == today:
-            await update.message.reply_text("Bugun olgansan")
-        else:
-            add_balance(uid, 10)
-            last_bonus[uid] = today
-            await update.message.reply_text("+10 so‘m bonus")
-
-    # 💳 PAYMENT
+        await update.message.reply_text(f"Referral link:\n{link}\n+100 so'm har user============== PAYMENT =================
     elif text == "💳 To‘lov":
         await update.message.reply_text("Karta: 9860 xxxx xxxx xxxx")
 
